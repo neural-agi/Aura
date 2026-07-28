@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Aura.Features</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\runtime\Aura.Runtime\Aura.Runtime.csproj" />
+    <ProjectReference Include="..\..\shared\Aura.Contracts\Aura.Contracts.csproj" />
+    <ProjectReference Include="..\..\shared\Aura.Shared\Aura.Shared.csproj" />
+    <ProjectReference Include="..\..\infrastructure\Aura.Infrastructure\Aura.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\infrastructure\Aura.Diagnostics\Aura.Diagnostics.csproj" />
+  </ItemGroup>
+</Project>

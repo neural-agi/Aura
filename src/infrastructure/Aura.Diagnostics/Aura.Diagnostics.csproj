@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Aura.Diagnostics</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\shared\Aura.Contracts\Aura.Contracts.csproj" />
+    <ProjectReference Include="..\..\shared\Aura.Shared\Aura.Shared.csproj" />
+    <ProjectReference Include="..\Aura.Infrastructure\Aura.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

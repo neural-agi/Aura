@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Restore
+        run: dotnet restore Aura.sln
+      - name: Build
+        run: dotnet build Aura.sln -c Release --no-restore
+      - name: Format
+        run: dotnet format Aura.sln --verify-no-changes
+      - name: Test
+        run: dotnet test Aura.sln -c Release --no-build
+      - name: Archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            **/bin/Release/**
+            **/obj/Release/**
+
