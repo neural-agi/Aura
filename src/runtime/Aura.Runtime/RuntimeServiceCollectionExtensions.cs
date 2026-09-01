@@ -9,6 +9,7 @@ public static class RuntimeServiceCollectionExtensions
         services.AddSingleton<IEventDispatcher, EventDispatcher>();
         services.AddSingleton<IRuntimeScheduler, RuntimeScheduler>();
         services.AddSingleton<IRuntimeCore, RuntimeCore>();
+        services.AddSingleton<IStateMachine, StateMachine>();
         services.AddHostedService<RuntimeHostedService>();
         return services;
     }
