@@ -1,6 +1,8 @@
 using Aura.UI.Interop;
 using Aura.UI.Monitoring;
 using Aura.UI.Theming;
+using Aura.UI.Surface;
+using Aura.Runtime;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -14,6 +16,8 @@ public sealed class WindowManager : IWindowManager
     private readonly IThemeService _themeService;
     private readonly IHostApplicationLifetime _lifetime;
     private readonly ILogger<WindowManager> _logger;
+    private readonly ISurfaceManager _surfaceManager;
+    private readonly IStateMachine _stateMachine;
     private readonly object _gate = new();
 
     private IAppWindow? _activeWindow;
@@ -26,7 +30,9 @@ public sealed class WindowManager : IWindowManager
         IMonitorService monitorService,
         IThemeService themeService,
         IHostApplicationLifetime lifetime,
-        ILogger<WindowManager> logger)
+        ILogger<WindowManager> logger,
+        ISurfaceManager surfaceManager,
+        IStateMachine stateMachine)
     {
         _windowFactory = windowFactory;
         _win32Interop = win32Interop;
@@ -34,6 +40,8 @@ public sealed class WindowManager : IWindowManager
         _themeService = themeService;
         _lifetime = lifetime;
         _logger = logger;
+        _surfaceManager = surfaceManager;
+        _stateMachine = stateMachine;
     }
 
     public IAppWindow? ActiveWindow
@@ -47,6 +55,7 @@ public sealed class WindowManager : IWindowManager
 
     public ValueTask StartAsync(CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("WindowManager.StartAsync entered.");
         IAppWindow window;
 
         lock (_gate)
@@ -61,13 +70,18 @@ public sealed class WindowManager : IWindowManager
             window = _windowFactory.Create();
             _activeWindow = window;
         }
+        _logger.LogInformation("Window created and assigned as active window.");
 
         _win32Interop.EnsurePerMonitorDpiAwareness();
-        _themeService.Attach(window);
-        _monitorService.Attach(window);
         window.StateChanged += OnWindowStateChanged;
         window.Closed += OnWindowClosed;
         window.Activate();
+        _logger.LogInformation("Window activated.");
+        _themeService.Attach(window);
+        _monitorService.Attach(window);
+        _surfaceManager.Attach(window.Handle);
+        _stateMachine.TryTransition(AuraState.Surfacing);
+        _stateMachine.TryTransition(AuraState.Compact);
         _logger.LogInformation("Aura window shell started.");
         return ValueTask.CompletedTask;
     }

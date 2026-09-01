@@ -1,6 +1,7 @@
 using Aura.UI.Theming;
 using Aura.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Aura.UI.Surface;
 using WinRT.Interop;
 
 namespace Aura.App;
@@ -11,9 +12,9 @@ public sealed partial class MainWindow : Microsoft.UI.Xaml.Window, IAppWindow
     private event EventHandler? _closedCallback;
     private nint _handle;
 
-    public MainWindow()
+    public MainWindow(ISurfaceView surfaceView)
     {
-        InitializeComponent();
+        Content = surfaceView.Root;
         Title = "Aura";
         Activated += OnActivated;
         Closed += OnClosed;

@@ -2,6 +2,7 @@ using Aura.UI.Interop;
 using Aura.UI.Monitoring;
 using Aura.UI.Theming;
 using Aura.UI.Windowing;
+using Aura.UI.Surface;
 using FluentAssertions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -94,7 +95,7 @@ public sealed class UiShellTests
         var themeService = new ThemeService(NullLogger<ThemeService>.Instance);
         var factory = new DelegateAppWindowFactory(() => window);
 
-        return new WindowManager(factory, interop, monitorService, themeService, lifetime, NullLogger<WindowManager>.Instance);
+        return new WindowManager(factory, interop, monitorService, themeService, lifetime, NullLogger<WindowManager>.Instance, new FakeSurfaceManager(), new Aura.Runtime.StateMachine());
     }
 
     private sealed class FakeAppWindow : IAppWindow
@@ -166,6 +167,14 @@ public sealed class UiShellTests
             RequestCount++;
             return new MonitorSnapshot("DISPLAY1", 0, 0, 1920, 1080, 0, 0, 1920, 1040, 96, true);
         }
+
+        public void SetWindowBounds(nint windowHandle, int left, int top, int width, int height) { }
+    }
+
+    private sealed class FakeSurfaceManager : ISurfaceManager
+    {
+        public SurfacePresentationState Current { get; } = new(SurfacePresentationMode.Hidden, false, "", "");
+        public void Attach(nint windowHandle) { }
     }
 
     private sealed class FakeHostApplicationLifetime : IHostApplicationLifetime

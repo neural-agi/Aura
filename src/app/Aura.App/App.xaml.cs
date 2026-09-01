@@ -7,7 +7,6 @@ public sealed partial class App : Microsoft.UI.Xaml.Application
 {
     public App()
     {
-        InitializeComponent();
         Bootstrap.BootstrapRuntime.Initialize();
     }
 

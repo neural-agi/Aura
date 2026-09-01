@@ -5,6 +5,7 @@ using Serilog;
 using Aura.Runtime;
 using Aura.UI;
 using Aura.UI.Windowing;
+using Aura.UI.Surface;
 
 namespace Aura.App.Bootstrap;
 
@@ -34,7 +35,7 @@ public static class BootstrapHostFactory
         {
             services.AddAuraRuntime();
             services.AddAuraUiShell();
-            services.AddSingleton<IAppWindowFactory>(_ => new DelegateAppWindowFactory(() => new MainWindow()));
+            services.AddSingleton<IAppWindowFactory>(sp => new DelegateAppWindowFactory(() => new MainWindow(sp.GetRequiredService<ISurfaceView>())));
         });
 
         return builder.Build();

@@ -9,6 +9,7 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
     <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="NSubstitute" />
     <ProjectReference Include="..\..\..\src\ui\Aura.UI\Aura.UI.csproj" />
     <ProjectReference Include="..\..\..\src\runtime\Aura.Runtime\Aura.Runtime.csproj" />
     <ProjectReference Include="..\..\..\src\app\Aura.App\Aura.App.csproj" />
