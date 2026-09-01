@@ -6,6 +6,8 @@ public sealed class Win32Interop : IWin32Interop
 {
     private const uint MonitorDefaultToNearest = 2;
     private const uint MonitorPrimary = 1;
+    private const uint SetWindowPositionNoActivate = 0x0010;
+    private const uint SetWindowPositionNoZOrder = 0x0004;
     private static readonly nint PerMonitorAwareV2 = new(-4);
     private bool _dpiAware;
 
@@ -50,11 +52,20 @@ public sealed class Win32Interop : IWin32Interop
             info.Flags == MonitorPrimary);
     }
 
+    public void SetWindowBounds(nint windowHandle, int left, int top, int width, int height)
+    {
+        if (!SetWindowPos(windowHandle, 0, left, top, width, height,
+                SetWindowPositionNoActivate | SetWindowPositionNoZOrder))
+        {
+            throw new InvalidOperationException("Unable to position the Aura window.");
+        }
+    }
+
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetProcessDpiAwarenessContext(nint dpiAwarenessContext);
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [DllImport("user32.dll", EntryPoint = "GetDpiForWindow", SetLastError = true)]
     private static extern uint GetDpiForWindowInternal(nint hwnd);
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -63,6 +74,10 @@ public sealed class Win32Interop : IWin32Interop
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetMonitorInfo(nint hMonitor, ref MonitorInfo lpmi);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(nint hWnd, nint hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Rect
