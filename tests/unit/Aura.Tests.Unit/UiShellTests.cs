@@ -125,7 +125,9 @@ public sealed class UiShellTests
             remove => _closed -= value;
         }
 
-        public void Activate()
+        public void PrepareForStartup() { }
+
+        public void RevealAfterStartup()
         {
             ActivatedCount++;
             _activated?.Invoke(this, EventArgs.Empty);
@@ -169,6 +171,7 @@ public sealed class UiShellTests
         }
 
         public void SetWindowBounds(nint windowHandle, int left, int top, int width, int height) { }
+        public void ConfigureFloatingWindow(nint windowHandle) { }
     }
 
     private sealed class FakeSurfaceManager : ISurfaceManager

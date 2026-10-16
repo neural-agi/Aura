@@ -12,6 +12,13 @@ public sealed partial class App : Microsoft.UI.Xaml.Application
 
     protected override async void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
+        if (!Bootstrap.SingleInstanceActivation.RegisterOrActivateCurrentInstance(
+            Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs()!))
+        {
+            Exit();
+            return;
+        }
+
         await Bootstrap.BootstrapRuntime.StartAsync();
 
         var host = Bootstrap.BootstrapRuntime.GetHost();

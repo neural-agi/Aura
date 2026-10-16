@@ -95,6 +95,7 @@ public sealed class SurfaceManagerTests
         public List<SurfacePresentationMode> States { get; } = new();
         public event EventHandler<InteractionIntentRequestedEventArgs>? InteractionRequested;
         public void Render(SurfacePresentationState state) => States.Add(state.Mode);
+        public void BeginStartupEntrance() { }
 
         public void Raise(InteractionIntent intent) => InteractionRequested?.Invoke(this, new(intent));
     }
@@ -105,5 +106,6 @@ public sealed class SurfaceManagerTests
         public uint GetDpiForWindow(nint windowHandle) => 96;
         public MonitorSnapshot GetMonitorSnapshot(nint windowHandle) => new("DISPLAY1", 0, 0, 1920, 1080, 0, 0, 1920, 1040, 96, true);
         public void SetWindowBounds(nint windowHandle, int left, int top, int width, int height) { }
+        public void ConfigureFloatingWindow(nint windowHandle) { }
     }
 }

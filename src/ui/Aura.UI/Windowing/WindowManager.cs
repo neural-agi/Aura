@@ -75,13 +75,13 @@ public sealed class WindowManager : IWindowManager
         _win32Interop.EnsurePerMonitorDpiAwareness();
         window.StateChanged += OnWindowStateChanged;
         window.Closed += OnWindowClosed;
-        window.Activate();
-        _logger.LogInformation("Window activated.");
+        window.PrepareForStartup();
         _themeService.Attach(window);
         _monitorService.Attach(window);
         _surfaceManager.Attach(window.Handle);
         _stateMachine.TryTransition(AuraState.Surfacing);
         _stateMachine.TryTransition(AuraState.Compact);
+        window.RevealAfterStartup();
         _logger.LogInformation("Aura window shell started.");
         return ValueTask.CompletedTask;
     }

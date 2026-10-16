@@ -12,7 +12,9 @@ public interface IAppWindow
 
     nint Handle { get; }
 
-    void Activate();
+    void PrepareForStartup();
+
+    void RevealAfterStartup();
 
     void Close();
 
