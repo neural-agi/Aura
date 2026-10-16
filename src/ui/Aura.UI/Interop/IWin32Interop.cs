@@ -7,5 +7,7 @@ public interface IWin32Interop
     uint GetDpiForWindow(nint windowHandle);
 
     MonitorSnapshot GetMonitorSnapshot(nint windowHandle);
+
+    void SetWindowBounds(nint windowHandle, int left, int top, int width, int height);
 }
 
