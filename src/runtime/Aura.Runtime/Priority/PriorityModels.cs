@@ -9,6 +9,7 @@ public sealed record PriorityInput(
     string Id,
     PriorityClass BasePriority = PriorityClass.Low,
     bool IsSystemCritical = false,
+    bool IsUserDeclaredPriority = false,
     bool IsPrioritySource = false,
     bool IsTimeSensitive = false,
     bool IsContextRelevant = false,
@@ -18,7 +19,10 @@ public sealed record PriorityInput(
     bool IsRepeated = false,
     bool CanMerge = false,
     bool PolicyAllowed = true,
-    ContextSnapshot? Context = null);
+    ContextSnapshot? Context = null,
+    DateTimeOffset? OccurredAtUtc = null,
+    DateTimeOffset? EvaluatedAtUtc = null,
+    TimeSpan? MaximumAge = null);
 
 public sealed record PriorityDecision(
     PriorityClass Classification,

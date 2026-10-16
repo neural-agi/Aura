@@ -1,6 +1,6 @@
 namespace Aura.Runtime.Context;
 
-public sealed record ContextEvidence(string Signal, ContextCategory Category, double Weight);
+public sealed record ContextEvidence(string Signal, ContextCategory Category, double Weight, bool IsAvailable = true);
 
 public sealed record ContextSnapshot(
     ContextCategory Category,
@@ -19,4 +19,6 @@ public sealed record ContextInput(
     bool IsFocusSession = false,
     bool IsOffline = false,
     bool IsBatterySaver = false,
-    bool IsUserActive = true);
+    bool IsUserActive = true,
+    IReadOnlySet<ContextCategory>? AdditionalEvidence = null,
+    IReadOnlySet<string>? UnavailableSignals = null);

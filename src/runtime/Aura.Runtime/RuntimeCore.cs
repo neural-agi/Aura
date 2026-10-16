@@ -13,18 +13,9 @@ public sealed class RuntimeCore : IRuntimeCore
     private RuntimeHealth _health = RuntimeHealth.Unknown;
     private bool _started;
     private readonly IRuntimeDecisionPipeline _decisionPipeline;
-    private RuntimeDecision? _lastDecision;
+    private RuntimeEvaluationResult? _lastEvaluation;
     private IDisposable? _evaluationSubscription;
 
-    public RuntimeCore(IEventDispatcher eventDispatcher, ILogger<RuntimeCore> logger)
-        : this(eventDispatcher, logger, new RuntimeDecisionPipeline(
-            new Context.ContextEngine(),
-            new Priority.PriorityEngine(),
-            new Policy.PolicyEvaluator(),
-            new Settings.JsonSettingsStore(),
-            new StateMachine()))
-    {
-    }
 
     public RuntimeCore(IEventDispatcher eventDispatcher, ILogger<RuntimeCore> logger, IRuntimeDecisionPipeline decisionPipeline)
     {
@@ -43,20 +34,38 @@ public sealed class RuntimeCore : IRuntimeCore
         get { lock (_gate) return _health; }
     }
 
-    public RuntimeDecision? LastDecision { get { lock (_gate) return _lastDecision; } }
+    public RuntimeEvaluationResult? LastEvaluation { get { lock (_gate) return _lastEvaluation; } }
 
-    public RuntimeDecision Evaluate(RuntimeEvaluationInput input)
+    public RuntimeEvaluationResult Evaluate(RuntimeEvaluationInput input)
     {
-        var decision = _decisionPipeline.Evaluate(input);
-        lock (_gate) _lastDecision = decision;
-        return decision;
+        try
+        {
+            var result = new RuntimeEvaluationResult.Success(_decisionPipeline.Evaluate(input));
+            lock (_gate) _lastEvaluation = result;
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            var result = new RuntimeEvaluationResult.FailureResult(ex);
+            lock (_gate) _lastEvaluation = result;
+            return result;
+        }
     }
 
     private ValueTask HandleEventAsync(RuntimeEvent runtimeEvent, CancellationToken cancellationToken)
     {
-        if (runtimeEvent is RuntimeEvaluationRequestedEvent request)
+        cancellationToken.ThrowIfCancellationRequested();
+        if (runtimeEvent is not RuntimeEvaluationRequestedEvent request) return ValueTask.CompletedTask;
+
+        var result = Evaluate(request.Input);
+        if (result is RuntimeEvaluationResult.FailureResult failure)
         {
-            Evaluate(request.Input);
+            lock (_gate) _health = RuntimeHealth.Degraded;
+            _logger.LogError(failure.Error, "Runtime decision evaluation failed; state was left unchanged.");
         }
 
         return ValueTask.CompletedTask;
@@ -100,6 +109,7 @@ public sealed class RuntimeCore : IRuntimeCore
                 _started = false;
             }
 
+            ReleaseEvaluationSubscription();
             _logger.LogWarning("Aura runtime startup was canceled.");
             throw;
         }
@@ -112,6 +122,7 @@ public sealed class RuntimeCore : IRuntimeCore
                 _started = false;
             }
 
+            ReleaseEvaluationSubscription();
             _logger.LogCritical(ex, "Aura runtime failed to start.");
             throw;
         }
@@ -148,8 +159,7 @@ public sealed class RuntimeCore : IRuntimeCore
             }
 
             _logger.LogInformation("Aura runtime stopped.");
-            _evaluationSubscription?.Dispose();
-            _evaluationSubscription = null;
+            ReleaseEvaluationSubscription();
         }
         catch (OperationCanceledException)
         {
@@ -160,6 +170,7 @@ public sealed class RuntimeCore : IRuntimeCore
                 _started = false;
             }
 
+            ReleaseEvaluationSubscription();
             _logger.LogWarning("Aura runtime shutdown was canceled.");
             throw;
         }
@@ -172,8 +183,15 @@ public sealed class RuntimeCore : IRuntimeCore
                 _started = false;
             }
 
+            ReleaseEvaluationSubscription();
             _logger.LogCritical(ex, "Aura runtime failed during shutdown.");
             throw;
         }
+    }
+
+    private void ReleaseEvaluationSubscription()
+    {
+        _evaluationSubscription?.Dispose();
+        _evaluationSubscription = null;
     }
 }

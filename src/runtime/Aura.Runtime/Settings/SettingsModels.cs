@@ -1,5 +1,6 @@
 namespace Aura.Runtime.Settings;
 
+// PROVISIONAL scope note: ReducedMotion and RetentionDays remain persisted/validated preferences but have no M3 runtime consumer.
 public sealed record AuraSettings(
     bool SurfaceEnabled = true,
     bool ReducedMotion = false,
