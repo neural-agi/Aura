@@ -7,9 +7,9 @@ public interface IRuntimeCore
     RuntimeState State { get; }
 
     RuntimeHealth Health { get; }
-    RuntimeDecision? LastDecision { get; }
+    RuntimeEvaluationResult? LastEvaluation { get; }
 
-    RuntimeDecision Evaluate(RuntimeEvaluationInput input);
+    RuntimeEvaluationResult Evaluate(RuntimeEvaluationInput input);
 
     ValueTask StartAsync(CancellationToken cancellationToken = default);
 
