@@ -12,7 +12,7 @@ namespace Aura.App.Bootstrap;
 
 public static class BootstrapHostFactory
 {
-    public static IHost CreateHost()
+    public static IHost CreateHost(Action<IServiceCollection>? configureServices = null)
     {
         var builder = Host.CreateDefaultBuilder();
 
@@ -38,6 +38,7 @@ public static class BootstrapHostFactory
             services.AddAuraUiShell();
             services.AddSingleton<IAppWindowFactory>(sp => new DelegateAppWindowFactory(() => new MainWindow(
                 sp.GetRequiredService<ISurfaceView>(), sp.GetRequiredService<IWin32Interop>())));
+            configureServices?.Invoke(services);
         });
 
         return builder.Build();

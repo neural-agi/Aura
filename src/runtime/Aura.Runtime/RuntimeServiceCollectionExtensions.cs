@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Aura.Runtime.Decision;
+using Aura.Runtime.Notifications;
 
 namespace Aura.Runtime;
 
@@ -9,6 +11,10 @@ public static class RuntimeServiceCollectionExtensions
     {
         services.AddSingleton<IEventDispatcher, EventDispatcher>();
         services.AddSingleton<IRuntimeScheduler, RuntimeScheduler>();
+        services.TryAddSingleton<INotificationProjectionSink, NullNotificationProjectionSink>();
+        services.TryAddSingleton<INotificationProvider, UnavailableNotificationProvider>();
+        services.TryAddSingleton<NotificationIdentitySet>();
+        services.TryAddSingleton<NotificationIngestionService>();
         services.AddSingleton<IRuntimeCore, RuntimeCore>();
         services.AddSingleton<IStateMachine, StateMachine>();
         services.AddSingleton<Context.IContextEngine, Context.ContextEngine>();

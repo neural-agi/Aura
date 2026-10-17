@@ -3,11 +3,13 @@ using Aura.Runtime;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Aura.Runtime.Decision;
 using Aura.Runtime.Context;
 using Aura.Runtime.Policy;
 using Aura.Runtime.Priority;
 using Aura.Runtime.Settings;
+using Aura.Runtime.Notifications;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aura.Tests.Unit;
@@ -17,7 +19,8 @@ public sealed class RuntimeBootstrapTests
     [Xunit.Fact]
     public async Task BootstrapHost_ComposesAndStarts()
     {
-        using var host = BootstrapHostFactory.CreateHost();
+        using var host = BootstrapHostFactory.CreateHost(services =>
+            services.Replace(ServiceDescriptor.Singleton<INotificationProjectionSink, NullNotificationProjectionSink>()));
 
         host.Services.GetRequiredService<IConfiguration>().Should().NotBeNull();
         host.Services.GetRequiredService<IRuntimeCore>().Should().NotBeNull();
@@ -94,7 +97,8 @@ public sealed class RuntimeBootstrapTests
                 new PriorityEngine(),
                 new PolicyEvaluator(),
                 new JsonSettingsStore(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString(), "settings.json")),
-                stateMachine));
+                stateMachine),
+            new NullNotificationProjectionSink());
     }
 
     [Xunit.Fact]
@@ -102,7 +106,7 @@ public sealed class RuntimeBootstrapTests
     {
         var dispatcher = new EventDispatcher();
         var pipeline = new ThrowingDecisionPipeline();
-        var runtime = new RuntimeCore(dispatcher, NullLogger<RuntimeCore>.Instance, pipeline);
+        var runtime = new RuntimeCore(dispatcher, NullLogger<RuntimeCore>.Instance, pipeline, new NullNotificationProjectionSink());
         await runtime.StartAsync();
         var input = new RuntimeEvaluationInput(new ContextInput(), new PriorityInput("failure"),
             new PolicyRequest(PolicyResource.Surface, "show"));
@@ -125,7 +129,7 @@ public sealed class RuntimeBootstrapTests
     {
         var dispatcher = new EventDispatcher();
         var pipeline = new CancelingDecisionPipeline();
-        var runtime = new RuntimeCore(dispatcher, NullLogger<RuntimeCore>.Instance, pipeline);
+        var runtime = new RuntimeCore(dispatcher, NullLogger<RuntimeCore>.Instance, pipeline, new NullNotificationProjectionSink());
         await runtime.StartAsync();
         using var cancellation = new CancellationTokenSource();
         await FluentActions.Awaiting(() => dispatcher.PublishAsync(new RuntimeEvaluationRequestedEvent(
@@ -142,7 +146,7 @@ public sealed class RuntimeBootstrapTests
     public async Task RuntimeCoreReleasesAndRecreatesSingleSubscriptionAcrossRestart()
     {
         var dispatcher = new TrackingEventDispatcher();
-        var runtime = new RuntimeCore(dispatcher, NullLogger<RuntimeCore>.Instance, new NoopDecisionPipeline());
+        var runtime = new RuntimeCore(dispatcher, NullLogger<RuntimeCore>.Instance, new NoopDecisionPipeline(), new NullNotificationProjectionSink());
 
         await runtime.StartAsync();
         dispatcher.ActiveSubscriptions.Should().Be(1);
@@ -160,7 +164,7 @@ public sealed class RuntimeBootstrapTests
     public async Task RuntimeCoreCleansSubscriptionAfterFailedStartupAndShutdown()
     {
         var dispatcher = new TrackingEventDispatcher { FailPublish = true };
-        var runtime = new RuntimeCore(dispatcher, NullLogger<RuntimeCore>.Instance, new NoopDecisionPipeline());
+        var runtime = new RuntimeCore(dispatcher, NullLogger<RuntimeCore>.Instance, new NoopDecisionPipeline(), new NullNotificationProjectionSink());
         await FluentActions.Awaiting(() => runtime.StartAsync().AsTask()).Should().ThrowAsync<InvalidOperationException>();
         dispatcher.ActiveSubscriptions.Should().Be(0);
 
@@ -175,7 +179,7 @@ public sealed class RuntimeBootstrapTests
     public async Task RuntimeCoreCleansSubscriptionAfterCanceledStartupAndShutdown()
     {
         var dispatcher = new TrackingEventDispatcher();
-        var runtime = new RuntimeCore(dispatcher, NullLogger<RuntimeCore>.Instance, new NoopDecisionPipeline());
+        var runtime = new RuntimeCore(dispatcher, NullLogger<RuntimeCore>.Instance, new NoopDecisionPipeline(), new NullNotificationProjectionSink());
         using var canceled = new CancellationTokenSource();
         canceled.Cancel();
         await FluentActions.Awaiting(() => runtime.StartAsync(canceled.Token).AsTask()).Should().ThrowAsync<OperationCanceledException>();

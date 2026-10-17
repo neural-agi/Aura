@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Aura.Runtime.Decision;
+using Aura.Runtime.Notifications;
 
 namespace Aura.Runtime;
 
@@ -13,15 +14,18 @@ public sealed class RuntimeCore : IRuntimeCore
     private RuntimeHealth _health = RuntimeHealth.Unknown;
     private bool _started;
     private readonly IRuntimeDecisionPipeline _decisionPipeline;
+    private readonly INotificationProjectionSink _notificationProjectionSink;
     private RuntimeEvaluationResult? _lastEvaluation;
     private IDisposable? _evaluationSubscription;
 
 
-    public RuntimeCore(IEventDispatcher eventDispatcher, ILogger<RuntimeCore> logger, IRuntimeDecisionPipeline decisionPipeline)
+    public RuntimeCore(IEventDispatcher eventDispatcher, ILogger<RuntimeCore> logger, IRuntimeDecisionPipeline decisionPipeline,
+        INotificationProjectionSink notificationProjectionSink)
     {
         _eventDispatcher = eventDispatcher;
         _logger = logger;
         _decisionPipeline = decisionPipeline;
+        _notificationProjectionSink = notificationProjectionSink;
     }
 
     public RuntimeState State
@@ -66,6 +70,12 @@ public sealed class RuntimeCore : IRuntimeCore
         {
             lock (_gate) _health = RuntimeHealth.Degraded;
             _logger.LogError(failure.Error, "Runtime decision evaluation failed; state was left unchanged.");
+        }
+        else if (request.Input.Notification is { } notification
+            && result is RuntimeEvaluationResult.Success success
+            && success.Decision.IsAuthorizedForSurface)
+        {
+            _notificationProjectionSink.Project(notification, success.Decision);
         }
 
         return ValueTask.CompletedTask;

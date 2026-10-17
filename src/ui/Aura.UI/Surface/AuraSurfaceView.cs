@@ -102,8 +102,10 @@ public sealed class AuraSurfaceView : ISurfaceView
 
     public void Render(SurfacePresentationState state)
     {
-        _status.Text = state.StatusText;
-        _context.Text = state.ContextText;
+        _status.Text = state.Notification?.Title ?? state.StatusText;
+        _context.Text = state.Notification is { } notification
+            ? $"{notification.SourceApp}: {notification.Body}"
+            : state.ContextText;
 
         // Keep a compact recovery affordance available after dismissal; the dismissed
         // presentation is otherwise reduced to the Recover action only.
