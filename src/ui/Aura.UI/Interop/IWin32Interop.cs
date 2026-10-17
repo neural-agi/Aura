@@ -9,5 +9,7 @@ public interface IWin32Interop
     MonitorSnapshot GetMonitorSnapshot(nint windowHandle);
 
     void SetWindowBounds(nint windowHandle, int left, int top, int width, int height);
+
+    void ConfigureFloatingWindow(nint windowHandle);
 }
 
