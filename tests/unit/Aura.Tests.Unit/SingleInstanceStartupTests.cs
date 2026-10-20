@@ -15,6 +15,14 @@ public sealed class SingleInstanceStartupTests
             return;
         }
 
+        LogMarker("test operation started");
+        await SecondLaunchRedirectsToTheFirstAuraWindowCoreAsync()
+            .WaitAsync(TimeSpan.FromSeconds(60));
+        LogMarker("test operation completed");
+    }
+
+    private static async Task SecondLaunchRedirectsToTheFirstAuraWindowCoreAsync()
+    {
         var configuration = typeof(SingleInstanceStartupTests).Assembly
             .GetCustomAttribute<AssemblyConfigurationAttribute>()?.Configuration ?? "Debug";
         var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
@@ -23,36 +31,59 @@ public sealed class SingleInstanceStartupTests
         File.Exists(executable).Should().BeTrue($"Aura executable must be built at {executable}");
 
         using var first = Process.Start(new ProcessStartInfo(executable) { WorkingDirectory = Path.GetDirectoryName(executable)! })!;
+        LogMarker($"first Aura process started; pid={first.Id}");
         try
         {
+            LogMarker($"WaitForAuraWindowAsync start; pid={first.Id}");
             var firstWindow = await WaitForAuraWindowAsync(first.Id);
+            LogMarker($"WaitForAuraWindowAsync end; pid={first.Id}; hwnd=0x{firstWindow.ToInt64():X}");
             if (firstWindow == IntPtr.Zero)
             {
+                LogMarker("OutputStartupDiagnosticsAsync start");
                 await OutputStartupDiagnosticsAsync(first);
+                LogMarker("OutputStartupDiagnosticsAsync end");
             }
+            LogMarker("first-window assertion start");
             firstWindow.Should().NotBe(IntPtr.Zero, "the first launch should create its Aura window");
+            LogMarker("first-window assertion passed");
             (await GetAuraProcessIdsAsync()).Should().BeEquivalentTo([first.Id]);
             await WaitForProcessToExitAsync(first.Id);
             first.HasExited.Should().BeFalse("the first launch must remain authoritative");
 
+            LogMarker("second Aura process start");
             using var second = Process.Start(new ProcessStartInfo(executable) { WorkingDirectory = Path.GetDirectoryName(executable)! })!;
+            LogMarker($"second Aura process started; pid={second.Id}; waiting for exit");
             await second.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
+            LogMarker($"second Aura process exited; pid={second.Id}; exitCode={second.ExitCode}");
             second.ExitCode.Should().Be(0);
 
+            LogMarker("post-second-launch Aura process assertion start");
             (await GetAuraProcessIdsAsync()).Should().BeEquivalentTo([first.Id]);
+            LogMarker("post-second-launch Aura process assertion passed");
             var windows = GetAuraWindows();
             windows.Should().ContainSingle(window => window.ProcessId == first.Id && window.Title == "Aura");
+            LogMarker("first-window uniqueness assertion passed");
             windows.Should().NotContain(window => window.ProcessId == second.Id);
+            LogMarker("second-window absence assertion passed");
         }
         finally
         {
+            LogMarker("finally entered");
             if (!first.HasExited)
             {
+                LogMarker($"first process Kill start; pid={first.Id}");
                 first.Kill(entireProcessTree: true);
+                LogMarker($"first process Kill end; pid={first.Id}");
+                LogMarker($"first process WaitForExitAsync start; pid={first.Id}");
                 await first.WaitForExitAsync();
+                LogMarker($"first process WaitForExitAsync end; pid={first.Id}");
             }
+            LogMarker("finally exited");
         }
     }
+
+    private static void LogMarker(string message)
+        => Console.Error.WriteLine($"[{DateTimeOffset.UtcNow:O}] Single-instance test: {message}");
 
     private static string FindRepositoryRoot(string startDirectory)
     {
