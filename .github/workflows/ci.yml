@@ -21,65 +21,79 @@ jobs:
       - name: Test Aura.Tests.Unit (bounded diagnostics)
         shell: pwsh
         run: |
-          $timeoutMilliseconds = 180000
-          $stdoutPath = Join-Path $env:RUNNER_TEMP "aura-unit-$PID.stdout.log"
-          $stderrPath = Join-Path $env:RUNNER_TEMP "aura-unit-$PID.stderr.log"
-          $test = Start-Process -FilePath dotnet `
-            -ArgumentList @('test', 'tests/unit/Aura.Tests.Unit/Aura.Tests.Unit.csproj', '-c', 'Release', '--no-build') `
-            -WorkingDirectory $env:GITHUB_WORKSPACE `
-            -RedirectStandardOutput $stdoutPath `
-            -RedirectStandardError $stderrPath `
-            -PassThru -NoNewWindow
+          function Invoke-BoundedDotnetTest([string[]]$Arguments, [string]$Label, [bool]$ControlLaunch = $false) {
+            $timeoutMilliseconds = 180000
+            $stdoutPath = Join-Path $env:RUNNER_TEMP "$Label-$PID.stdout.log"
+            $stderrPath = Join-Path $env:RUNNER_TEMP "$Label-$PID.stderr.log"
+            $previousControlLaunch = $env:AURA_SINGLE_INSTANCE_CONTROL_LAUNCH
+            if ($ControlLaunch) { $env:AURA_SINGLE_INSTANCE_CONTROL_LAUNCH = '1' }
+            try {
+              $test = Start-Process -FilePath dotnet `
+                -ArgumentList $Arguments `
+                -WorkingDirectory $env:GITHUB_WORKSPACE `
+                -RedirectStandardOutput $stdoutPath `
+                -RedirectStandardError $stderrPath `
+                -PassThru -NoNewWindow
 
-          Write-Host "Started Unit test command; PID=$($test.Id); start=$($test.StartTime.ToString('o')); timeout=${timeoutMilliseconds}ms"
-          if ($test.WaitForExit($timeoutMilliseconds)) {
-            $test.Refresh()
-            if (Test-Path $stdoutPath) { Get-Content $stdoutPath }
-            if (Test-Path $stderrPath) { Get-Content $stderrPath }
-            Write-Host "Unit test process exited; PID=$($test.Id); exitCode=$($test.ExitCode)"
-            exit $test.ExitCode
+              Write-Host "Started $Label; PID=$($test.Id); start=$($test.StartTime.ToString('o')); timeout=${timeoutMilliseconds}ms"
+              if ($test.WaitForExit($timeoutMilliseconds)) {
+                $test.Refresh()
+                if (Test-Path $stdoutPath) { Get-Content $stdoutPath }
+                if (Test-Path $stderrPath) { Get-Content $stderrPath }
+                Write-Host "$Label exited; PID=$($test.Id); exitCode=$($test.ExitCode)"
+                return [int]$test.ExitCode
+              }
+
+              Write-Host "$Label exceeded timeout; collecting process state before cleanup."
+              if (Test-Path $stdoutPath) { Write-Host '--- captured stdout ---'; Get-Content $stdoutPath }
+              if (Test-Path $stderrPath) { Write-Host '--- captured stderr ---'; Get-Content $stderrPath }
+
+              $allProcesses = @(Get-CimInstance Win32_Process)
+              $treeIds = [System.Collections.Generic.HashSet[int]]::new()
+              [void]$treeIds.Add($test.Id)
+              do {
+                $added = $false
+                foreach ($process in $allProcesses) {
+                  if ($treeIds.Contains([int]$process.ParentProcessId) -and $treeIds.Add([int]$process.ProcessId)) { $added = $true }
+                }
+              } while ($added)
+
+              Write-Host '--- timed-out test process tree ---'
+              $allProcesses |
+                Where-Object { $treeIds.Contains([int]$_.ProcessId) } |
+                ForEach-Object {
+                  $started = try { (Get-Process -Id $_.ProcessId -ErrorAction Stop).StartTime.ToString('o') } catch { 'unavailable' }
+                  Write-Host "PID=$($_.ProcessId) PPID=$($_.ParentProcessId) Start=$started Name=$($_.Name) CommandLine=$($_.CommandLine)"
+                }
+              Write-Host '--- relevant Aura/.NET processes on runner ---'
+              $allProcesses |
+                Where-Object { $_.Name -match '^(Aura\.App|dotnet|testhost)(\.exe)?$' } |
+                ForEach-Object {
+                  $started = try { (Get-Process -Id $_.ProcessId -ErrorAction Stop).StartTime.ToString('o') } catch { 'unavailable' }
+                  Write-Host "PID=$($_.ProcessId) PPID=$($_.ParentProcessId) Start=$started Name=$($_.Name) CommandLine=$($_.CommandLine) InTestTree=$($treeIds.Contains([int]$_.ProcessId))"
+                }
+
+              Write-Host "Attempting graceful test-tree termination for PID=$($test.Id)."
+              & taskkill.exe /PID $test.Id /T
+              Start-Sleep -Seconds 10
+              $test.Refresh()
+              if (-not $test.HasExited) {
+                Write-Host "Test tree still running; force-terminating only PID=$($test.Id) and its descendants."
+                & taskkill.exe /PID $test.Id /T /F
+                [void]$test.WaitForExit(10000)
+              }
+              Write-Error "$Label exceeded the ${timeoutMilliseconds}ms diagnostic timeout."
+              return 124
+            }
+            finally {
+              $env:AURA_SINGLE_INSTANCE_CONTROL_LAUNCH = $previousControlLaunch
+            }
           }
 
-          Write-Host "Unit test command exceeded timeout; collecting process state before cleanup."
-          if (Test-Path $stdoutPath) { Write-Host '--- captured stdout ---'; Get-Content $stdoutPath }
-          if (Test-Path $stderrPath) { Write-Host '--- captured stderr ---'; Get-Content $stderrPath }
-
-          $allProcesses = @(Get-CimInstance Win32_Process)
-          $treeIds = [System.Collections.Generic.HashSet[int]]::new()
-          [void]$treeIds.Add($test.Id)
-          do {
-            $added = $false
-            foreach ($process in $allProcesses) {
-              if ($treeIds.Contains([int]$process.ParentProcessId) -and $treeIds.Add([int]$process.ProcessId)) { $added = $true }
-            }
-          } while ($added)
-
-          Write-Host '--- timed-out test process tree ---'
-          $allProcesses |
-            Where-Object { $treeIds.Contains([int]$_.ProcessId) } |
-            ForEach-Object {
-              $started = try { (Get-Process -Id $_.ProcessId -ErrorAction Stop).StartTime.ToString('o') } catch { 'unavailable' }
-              Write-Host "PID=$($_.ProcessId) PPID=$($_.ParentProcessId) Start=$started Name=$($_.Name) CommandLine=$($_.CommandLine)"
-            }
-          Write-Host '--- relevant Aura/.NET processes on runner ---'
-          $allProcesses |
-            Where-Object { $_.Name -match '^(Aura\.App|dotnet|testhost)(\.exe)?$' } |
-            ForEach-Object {
-              $started = try { (Get-Process -Id $_.ProcessId -ErrorAction Stop).StartTime.ToString('o') } catch { 'unavailable' }
-              Write-Host "PID=$($_.ProcessId) PPID=$($_.ParentProcessId) Start=$started Name=$($_.Name) CommandLine=$($_.CommandLine) InTestTree=$($treeIds.Contains([int]$_.ProcessId))"
-            }
-
-          Write-Host "Attempting graceful test-tree termination for PID=$($test.Id)."
-          & taskkill.exe /PID $test.Id /T
-          Start-Sleep -Seconds 10
-          $test.Refresh()
-          if (-not $test.HasExited) {
-            Write-Host "Test tree still running; force-terminating only PID=$($test.Id) and its descendants."
-            & taskkill.exe /PID $test.Id /T /F
-            [void]$test.WaitForExit(10000)
-          }
-          Write-Error "Unit test command exceeded the ${timeoutMilliseconds}ms diagnostic timeout."
-          exit 124
+          $code = Invoke-BoundedDotnetTest @('test', 'tests/unit/Aura.Tests.Unit/Aura.Tests.Unit.csproj', '-c', 'Release', '--no-build', '--filter', 'FullyQualifiedName~SecondLaunchRedirectsToTheFirstAuraWindow') 'aura-control' $true
+          if ($code -ne 0) { exit $code }
+          $code = Invoke-BoundedDotnetTest @('test', 'tests/unit/Aura.Tests.Unit/Aura.Tests.Unit.csproj', '-c', 'Release', '--no-build') 'aura-unit'
+          exit $code
       - name: Archive
         uses: actions/upload-artifact@v4
         with:
