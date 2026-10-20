@@ -90,7 +90,7 @@ public sealed class SingleInstanceStartupTests
 
     private static List<(int ProcessId, IntPtr Handle, string Title, bool IsVisible)> GetAuraOwnedWindows(int processId)
     {
-        var windows = new List<(int, IntPtr, string)>();
+        var windows = new List<(int ProcessId, IntPtr Handle, string Title, bool IsVisible)>();
         EnumWindows((handle, _) =>
         {
             GetWindowThreadProcessId(handle, out var ownerProcessId);
