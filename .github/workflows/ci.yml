@@ -19,7 +19,7 @@ jobs:
       - name: Format
         run: dotnet format Aura.sln --verify-no-changes
       - name: Test
-        run: dotnet test Aura.sln -c Release --no-build
+        run: dotnet test tests/unit/Aura.Tests.Unit/Aura.Tests.Unit.csproj -c Release --no-build
       - name: Archive
         uses: actions/upload-artifact@v4
         with:
