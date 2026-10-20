@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using FluentAssertions;
 
@@ -14,8 +15,11 @@ public sealed class SingleInstanceStartupTests
             return;
         }
 
-        var executable = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
-            "../../../../../../src/app/Aura.App/bin/Debug/net9.0-windows10.0.22621.0/Aura.App.exe"));
+        var configuration = typeof(SingleInstanceStartupTests).Assembly
+            .GetCustomAttribute<AssemblyConfigurationAttribute>()?.Configuration ?? "Debug";
+        var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
+        var executable = Path.Combine(repositoryRoot, "src", "app", "Aura.App", "bin", configuration,
+            "net9.0-windows10.0.22621.0", "Aura.App.exe");
         File.Exists(executable).Should().BeTrue($"Aura executable must be built at {executable}");
 
         using var first = Process.Start(new ProcessStartInfo(executable) { WorkingDirectory = Path.GetDirectoryName(executable)! })!;
@@ -44,6 +48,19 @@ public sealed class SingleInstanceStartupTests
                 await first.WaitForExitAsync();
             }
         }
+    }
+
+    private static string FindRepositoryRoot(string startDirectory)
+    {
+        for (var directory = new DirectoryInfo(startDirectory); directory is not null; directory = directory.Parent)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "Aura.sln")))
+            {
+                return directory.FullName;
+            }
+        }
+
+        throw new DirectoryNotFoundException("Could not find the Aura repository root containing Aura.sln.");
     }
 
     private static async Task<IntPtr> WaitForAuraWindowAsync(int processId)
