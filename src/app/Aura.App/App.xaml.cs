@@ -23,7 +23,13 @@ public sealed partial class App : Microsoft.UI.Xaml.Application
 
         var host = Bootstrap.BootstrapRuntime.GetHost();
         var windowManager = host.Services.GetRequiredService<IWindowManager>();
-        windowManager.ShutdownRequested += async (_, _) => await Bootstrap.BootstrapRuntime.ShutdownAsync();
+        windowManager.ShutdownRequested += async (_, _) =>
+        {
+            await Bootstrap.BootstrapRuntime.ShutdownAsync();
+            Exit();
+        };
+        var notificationAreaIcon = host.Services.GetRequiredService<Aura.UI.Interop.INotificationAreaIcon>();
+        notificationAreaIcon.ExitRequested += (_, _) => windowManager.RequestApplicationExit();
         await windowManager.StartAsync();
     }
 }

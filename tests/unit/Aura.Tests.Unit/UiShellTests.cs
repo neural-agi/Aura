@@ -95,7 +95,7 @@ public sealed class UiShellTests
         var themeService = new ThemeService(NullLogger<ThemeService>.Instance);
         var factory = new DelegateAppWindowFactory(() => window);
 
-        return new WindowManager(factory, interop, monitorService, themeService, lifetime, NullLogger<WindowManager>.Instance, new FakeSurfaceManager(), new Aura.Runtime.StateMachine());
+        return new WindowManager(factory, interop, monitorService, themeService, lifetime, NullLogger<WindowManager>.Instance, new FakeSurfaceManager(), new Aura.Runtime.StateMachine(), new FakeClipboardWindowListener(), new FakeNotificationAreaIcon());
     }
 
     private sealed class FakeAppWindow : IAppWindow
@@ -172,6 +172,21 @@ public sealed class UiShellTests
 
         public void SetWindowBounds(nint windowHandle, int left, int top, int width, int height) { }
         public void ConfigureFloatingWindow(nint windowHandle) { }
+    }
+
+    private sealed class FakeNotificationAreaIcon : INotificationAreaIcon
+    {
+        public event EventHandler? ExitRequested { add { } remove { } }
+        public void Attach(nint windowHandle) { }
+        public void Dispose() { }
+    }
+
+    private sealed class FakeClipboardWindowListener : IClipboardWindowListener
+    {
+        public int RegistrationCount { get; private set; }
+        public void Start() { }
+        public void Attach(nint windowHandle) => RegistrationCount = 1;
+        public void Stop() => RegistrationCount = 0;
     }
 
     private sealed class FakeSurfaceManager : ISurfaceManager

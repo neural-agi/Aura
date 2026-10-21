@@ -11,5 +11,7 @@ public interface IWindowManager
     ValueTask StartAsync(CancellationToken cancellationToken = default);
 
     ValueTask ShutdownAsync(CancellationToken cancellationToken = default);
+
+    void RequestApplicationExit();
 }
 
