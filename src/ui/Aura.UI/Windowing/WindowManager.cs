@@ -18,6 +18,8 @@ public sealed class WindowManager : IWindowManager
     private readonly ILogger<WindowManager> _logger;
     private readonly ISurfaceManager _surfaceManager;
     private readonly IStateMachine _stateMachine;
+    private readonly IClipboardWindowListener _clipboardListener;
+    private readonly INotificationAreaIcon _notificationAreaIcon;
     private readonly object _gate = new();
 
     private IAppWindow? _activeWindow;
@@ -32,7 +34,9 @@ public sealed class WindowManager : IWindowManager
         IHostApplicationLifetime lifetime,
         ILogger<WindowManager> logger,
         ISurfaceManager surfaceManager,
-        IStateMachine stateMachine)
+        IStateMachine stateMachine,
+        IClipboardWindowListener clipboardListener,
+        INotificationAreaIcon notificationAreaIcon)
     {
         _windowFactory = windowFactory;
         _win32Interop = win32Interop;
@@ -42,6 +46,8 @@ public sealed class WindowManager : IWindowManager
         _logger = logger;
         _surfaceManager = surfaceManager;
         _stateMachine = stateMachine;
+        _clipboardListener = clipboardListener;
+        _notificationAreaIcon = notificationAreaIcon;
     }
 
     public IAppWindow? ActiveWindow
@@ -78,12 +84,22 @@ public sealed class WindowManager : IWindowManager
         window.PrepareForStartup();
         _themeService.Attach(window);
         _monitorService.Attach(window);
+        _clipboardListener.Start();
+        _clipboardListener.Attach(window.Handle);
+        _notificationAreaIcon.Attach(window.Handle);
         _surfaceManager.Attach(window.Handle);
         _stateMachine.TryTransition(AuraState.Surfacing);
         _stateMachine.TryTransition(AuraState.Compact);
         window.RevealAfterStartup();
         _logger.LogInformation("Aura window shell started.");
         return ValueTask.CompletedTask;
+    }
+
+    public void RequestApplicationExit()
+    {
+        IAppWindow? window;
+        lock (_gate) window = _activeWindow;
+        if (window is not null) window.Close();
     }
 
     public ValueTask ShutdownAsync(CancellationToken cancellationToken = default)
@@ -145,6 +161,8 @@ public sealed class WindowManager : IWindowManager
 
         window.StateChanged -= OnWindowStateChanged;
         window.Closed -= OnWindowClosed;
+        _clipboardListener.Stop();
+        _notificationAreaIcon.Dispose();
         _monitorService.Detach();
         _themeService.Detach();
 
