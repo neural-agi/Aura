@@ -14,6 +14,17 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddAuraUiShell(this IServiceCollection services)
     {
         services.AddSingleton<IWin32Interop, Win32Interop>();
+        services.AddSingleton<Win32ClipboardNativeApi>();
+        services.AddSingleton<IClipboardNativeApi>(sp => sp.GetRequiredService<Win32ClipboardNativeApi>());
+        services.AddSingleton<Aura.Runtime.Artifacts.IClipboardTextWriter>(sp => sp.GetRequiredService<Win32ClipboardNativeApi>());
+        services.AddSingleton<IClipboardWindowListener, ClipboardWindowListener>();
+        services.AddSingleton<INotificationAreaIcon, NotificationAreaIcon>();
+        services.AddSingleton<Aura.Runtime.Artifacts.IClipboardArtifactPersistence, Aura.Runtime.Artifacts.JsonClipboardArtifactPersistence>();
+        services.AddSingleton<Aura.Runtime.Artifacts.ClipboardSensitivityClassifier>();
+        services.AddSingleton<TimeProvider>(TimeProvider.System);
+        services.AddSingleton<Aura.Runtime.Artifacts.ClipboardArtifactManager>();
+        services.AddSingleton<Aura.Runtime.Artifacts.IClipboardArtifactManager>(sp => sp.GetRequiredService<Aura.Runtime.Artifacts.ClipboardArtifactManager>());
+        services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(sp => sp.GetRequiredService<Aura.Runtime.Artifacts.ClipboardArtifactManager>());
         services.AddSingleton<IMonitorService, MonitorService>();
         services.AddSingleton<IThemeService, ThemeService>();
         services.AddSingleton<IWindowManager, WindowManager>();

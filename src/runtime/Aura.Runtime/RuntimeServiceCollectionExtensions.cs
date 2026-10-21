@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Aura.Runtime.Decision;
 using Aura.Runtime.Notifications;
+using Aura.Runtime.Artifacts;
 
 namespace Aura.Runtime;
 
@@ -15,6 +16,7 @@ public static class RuntimeServiceCollectionExtensions
         services.TryAddSingleton<INotificationProvider, UnavailableNotificationProvider>();
         services.TryAddSingleton<NotificationIdentitySet>();
         services.TryAddSingleton<NotificationIngestionService>();
+
         services.AddSingleton<IRuntimeCore, RuntimeCore>();
         services.AddSingleton<IStateMachine, StateMachine>();
         services.AddSingleton<Context.IContextEngine, Context.ContextEngine>();
