@@ -2,6 +2,7 @@ using Aura.Runtime;
 using Aura.Runtime.Context;
 using Aura.Runtime.Decision;
 using Aura.Runtime.Notifications;
+using Aura.Runtime.Artifacts;
 using Aura.Runtime.Policy;
 using Aura.Runtime.Priority;
 using Aura.Runtime.Settings;
@@ -170,6 +171,7 @@ public sealed class M4NotificationTests
             if (throwingContext) services.AddSingleton<IContextEngine, ThrowingContextEngine>();
             services.AddSingleton<IWin32Interop, TestInterop>();
             services.AddSingleton<ISurfaceView, TestSurfaceView>();
+            services.AddSingleton<IClipboardArtifactManager, NullClipboardArtifactManager>();
             services.AddSingleton<SurfaceManager>();
             services.AddSingleton<ISurfaceManager>(sp => sp.GetRequiredService<SurfaceManager>());
             services.AddSingleton<Aura.UI.Interaction.IInteractionEngine, Aura.UI.Interaction.InteractionEngine>();
@@ -188,6 +190,20 @@ public sealed class M4NotificationTests
                 AuthorizationKnown: true, IsAuthorized: authorized), notification);
 
 
+
+    private sealed class NullClipboardArtifactManager : IClipboardArtifactManager
+    {
+        public ClipboardHistorySnapshot Current { get; } = new(Array.Empty<ClipboardArtifact>(), true, null);
+        public event EventHandler<ClipboardHistorySnapshot>? Changed { add { } remove { } }
+        public ValueTask StartAsync(CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask StopAsync(CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public IReadOnlyList<ClipboardArtifact> Query(string? filter = null) => Current.Items;
+        public ValueTask<bool> CaptureAsync(ClipboardCaptureEvent capture, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
+        public ValueTask<bool> RestoreAsync(string id, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
+        public ValueTask<bool> SetPinnedAsync(string id, bool isPinned, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
+        public ValueTask<bool> DeleteAsync(string id, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
+        public void SetAvailability(bool isAvailable, string? status = null) { }
+    }
 
     private sealed class FixedSettingsStore(AuraSettings current) : ISettingsStore
     {
@@ -216,6 +232,7 @@ public sealed class M4NotificationTests
             remove { }
         }
         public void Render(SurfacePresentationState state) { }
+        public void RenderOnUiThread(SurfacePresentationState state, Action? afterRender = null) { Render(state); afterRender?.Invoke(); }
         public void BeginStartupEntrance() { }
     }
 
