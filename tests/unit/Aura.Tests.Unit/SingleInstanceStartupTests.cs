@@ -23,15 +23,23 @@ public sealed class SingleInstanceStartupTests
 
     private static async Task SecondLaunchRedirectsToTheFirstAuraWindowCoreAsync()
     {
+        var controlLaunch = string.Equals(
+            Environment.GetEnvironmentVariable("AURA_SINGLE_INSTANCE_CONTROL_LAUNCH"), "1", StringComparison.Ordinal);
         var configuration = typeof(SingleInstanceStartupTests).Assembly
             .GetCustomAttribute<AssemblyConfigurationAttribute>()?.Configuration ?? "Debug";
         var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
         var executable = Path.Combine(repositoryRoot, "src", "app", "Aura.App", "bin", configuration,
             "net9.0-windows10.0.22621.0", "Aura.App.exe");
-        File.Exists(executable).Should().BeTrue($"Aura executable must be built at {executable}");
+        if (!controlLaunch)
+        {
+            File.Exists(executable).Should().BeTrue($"Aura executable must be built at {executable}");
+        }
 
-        using var first = Process.Start(new ProcessStartInfo(executable) { WorkingDirectory = Path.GetDirectoryName(executable)! })!;
-        LogMarker($"first Aura process started; pid={first.Id}");
+        var startInfo = controlLaunch
+            ? new ProcessStartInfo("cmd.exe", "/d /c \"ping -n 30 127.0.0.1 > nul\"")
+            : new ProcessStartInfo(executable) { WorkingDirectory = Path.GetDirectoryName(executable)! };
+        using var first = Process.Start(startInfo)!;
+        LogMarker($"first {(controlLaunch ? "controlled child" : "Aura")} process started; pid={first.Id}");
         try
         {
             LogMarker($"WaitForAuraWindowAsync start; pid={first.Id}");
@@ -44,6 +52,14 @@ public sealed class SingleInstanceStartupTests
                 LogMarker("OutputStartupDiagnosticsAsync end");
             }
             LogMarker("first-window assertion start");
+            if (controlLaunch)
+            {
+                firstWindow.Should().Be(IntPtr.Zero, "the controlled non-Aura child must not create an Aura window");
+                first.HasExited.Should().BeFalse("the controlled child must remain alive through window discovery");
+                LogMarker("controlled launch assertions passed; returning through normal cleanup");
+                return;
+            }
+
             firstWindow.Should().NotBe(IntPtr.Zero, "the first launch should create its Aura window");
             LogMarker("first-window assertion passed");
             (await GetAuraProcessIdsAsync()).Should().BeEquivalentTo([first.Id]);
