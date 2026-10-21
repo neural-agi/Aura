@@ -21,7 +21,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\runtime\Aura.Runtime\Aura.Runtime.csproj" />
-    <ProjectReference Include="..\..\ui\Aura.UI\Aura.UI.csproj" />
+    <ProjectReference Include="..\..\ui\Aura.UI\Aura.UI.csproj" AdditionalProperties="WindowsAppSDKSelfContained=false" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="appsettings.json">
