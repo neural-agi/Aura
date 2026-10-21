@@ -6,5 +6,11 @@ public enum InteractionIntent
     Collapse,
     EnterInteractive,
     Dismiss,
-    Recover
+    Recover,
+    BrowseClipboard,
+    FilterClipboard,
+    RestoreClipboard,
+    PinClipboard,
+    UnpinClipboard,
+    DeleteClipboard
 }

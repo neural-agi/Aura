@@ -1,4 +1,5 @@
 using Aura.Runtime.Notifications;
+using Aura.Runtime.Artifacts;
 
 namespace Aura.UI.Surface;
 
@@ -8,7 +9,11 @@ public sealed record SurfacePresentationState(
     bool IsVisible,
     string StatusText,
     string ContextText,
-    AuraNotification? Notification = null);
+    AuraNotification? Notification = null,
+    IReadOnlyList<ClipboardArtifact>? ClipboardItems = null,
+    string? ClipboardStatus = null,
+    bool ClipboardAvailable = true,
+    bool IsClipboardHistoryOpen = false);
 
 public enum SurfacePresentationMode
 {

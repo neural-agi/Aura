@@ -2,5 +2,5 @@ namespace Aura.UI.Interaction;
 
 public interface IInteractionEngine
 {
-    bool Request(InteractionIntent intent);
+    ValueTask<bool> RequestAsync(InteractionIntent intent, string? value = null, CancellationToken cancellationToken = default);
 }
