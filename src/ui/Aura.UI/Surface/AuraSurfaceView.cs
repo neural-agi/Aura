@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Input;
 using Aura.Runtime.Artifacts;
+using Aura.Runtime.Media;
 using Aura.UI.Interaction;
 
 namespace Aura.UI.Surface;
@@ -26,6 +27,8 @@ public sealed class AuraSurfaceView : ISurfaceView
     private readonly StackPanel _clipboardItems;
     private readonly TextBlock _clipboardStatus;
     private readonly Grid _clipboardPanel;
+    private readonly Button _mediaOpen;
+    private readonly MediaSurfacePanel _mediaPanel;
 
     public AuraSurfaceView()
     {
@@ -37,6 +40,8 @@ public sealed class AuraSurfaceView : ISurfaceView
         _dismiss = CreateButton("Dismiss", "Dismiss Aura surface", InteractionIntent.Dismiss);
         _recover = CreateButton("Recover", "Recover Aura surface", InteractionIntent.Recover);
         _clipboardBrowse = CreateButton("Clipboard history", "Browse clipboard history", InteractionIntent.BrowseClipboard);
+        _mediaOpen = CreateButton("Media", "Open media controls", InteractionIntent.OpenMedia);
+        _mediaPanel = new MediaSurfacePanel((intent, value) => InteractionRequested?.Invoke(this, new(intent, value)));
         _clipboardFilter = new TextBox { PlaceholderText = "Filter clipboard history" };
         AutomationProperties.SetName(_clipboardFilter, "Filter clipboard history");
         _clipboardFilter.TextChanged += (_, _) => InteractionRequested?.Invoke(this, new(InteractionIntent.FilterClipboard, _clipboardFilter.Text));
@@ -89,6 +94,7 @@ public sealed class AuraSurfaceView : ISurfaceView
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         actions.Children.Add(_expand);
@@ -96,13 +102,16 @@ public sealed class AuraSurfaceView : ISurfaceView
         actions.Children.Add(_dismiss);
         actions.Children.Add(_recover);
         actions.Children.Add(_clipboardBrowse);
+        actions.Children.Add(_mediaOpen);
         Grid.SetRow(_status, 0);
         Grid.SetRow(_context, 1);
         Grid.SetRow(actions, 2);
-        Grid.SetRow(_clipboardPanel, 3);
+        Grid.SetRow(_mediaPanel.Root, 3);
+        Grid.SetRow(_clipboardPanel, 4);
         content.Children.Add(_status);
         content.Children.Add(_context);
         content.Children.Add(actions);
+        content.Children.Add(_mediaPanel.Root);
         content.Children.Add(_clipboardPanel);
 
         var glass = new Grid();
@@ -176,15 +185,18 @@ public sealed class AuraSurfaceView : ISurfaceView
             : Visibility.Collapsed;
         var dismissed = state.Mode == SurfacePresentationMode.Dismissed;
         var historyOpen = state.IsClipboardHistoryOpen;
-        _status.Visibility = historyOpen ? Visibility.Collapsed : Visibility.Visible;
-        _context.Visibility = historyOpen ? Visibility.Collapsed : Visibility.Visible;
-        _expand.Visibility = !historyOpen && (state.Mode is SurfacePresentationMode.Compact or SurfacePresentationMode.Eligible) ? Visibility.Visible : Visibility.Collapsed;
-        _interactive.Visibility = !historyOpen && state.Mode == SurfacePresentationMode.Expanded ? Visibility.Visible : Visibility.Collapsed;
-        _dismiss.Visibility = state.IsVisible && !dismissed && !historyOpen ? Visibility.Visible : Visibility.Collapsed;
+        var mediaOpen = state.IsMediaSurfaceOpen;
+        _status.Visibility = historyOpen || mediaOpen ? Visibility.Collapsed : Visibility.Visible;
+        _context.Visibility = historyOpen || mediaOpen ? Visibility.Collapsed : Visibility.Visible;
+        _expand.Visibility = !historyOpen && !mediaOpen && (state.Mode is SurfacePresentationMode.Compact or SurfacePresentationMode.Eligible) ? Visibility.Visible : Visibility.Collapsed;
+        _interactive.Visibility = !historyOpen && !mediaOpen && state.Mode == SurfacePresentationMode.Expanded ? Visibility.Visible : Visibility.Collapsed;
+        _dismiss.Visibility = state.IsVisible && !dismissed && !historyOpen && !mediaOpen ? Visibility.Visible : Visibility.Collapsed;
         _recover.Visibility = dismissed || state.Mode == SurfacePresentationMode.Hidden ? Visibility.Visible : Visibility.Collapsed;
-        _collapse.Visibility = historyOpen || (state.Mode is SurfacePresentationMode.Expanded or SurfacePresentationMode.Interactive) ? Visibility.Visible : Visibility.Collapsed;
-        _clipboardBrowse.Visibility = !historyOpen && !dismissed ? Visibility.Visible : Visibility.Collapsed;
+        _collapse.Visibility = historyOpen || mediaOpen || (state.Mode is SurfacePresentationMode.Expanded or SurfacePresentationMode.Interactive) ? Visibility.Visible : Visibility.Collapsed;
+        _clipboardBrowse.Visibility = !historyOpen && !mediaOpen && !dismissed ? Visibility.Visible : Visibility.Collapsed;
+        _mediaOpen.Visibility = !historyOpen && !mediaOpen && !dismissed ? Visibility.Visible : Visibility.Collapsed;
         _clipboardPanel.Visibility = historyOpen ? Visibility.Visible : Visibility.Collapsed;
+        _mediaPanel.Render(state.Media ?? MediaProjection.Unavailable, mediaOpen);
         _clipboardStatus.Text = historyOpen
             ? state.ClipboardItems is { Count: > 0 }
                 ? string.Empty

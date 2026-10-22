@@ -12,5 +12,10 @@ public enum InteractionIntent
     RestoreClipboard,
     PinClipboard,
     UnpinClipboard,
-    DeleteClipboard
+    DeleteClipboard,
+    OpenMedia,
+    MediaPlayPause,
+    MediaPrevious,
+    MediaNext,
+    MediaVolumeChanged
 }

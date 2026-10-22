@@ -5,8 +5,19 @@ using Aura.UI.Interaction;
 using Aura.Runtime.Decision;
 using Aura.Runtime.Notifications;
 using Aura.Runtime.Artifacts;
+using Aura.Runtime.Media;
 
 namespace Aura.UI.Surface;
+
+internal sealed class UnavailableMediaControlService : IMediaControlService
+{
+    public MediaProjection Current => MediaProjection.Unavailable;
+    public event EventHandler<MediaProjection>? Changed { add { } remove { } }
+    public ValueTask StartAsync(CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    public ValueTask StopAsync(CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    public ValueTask<MediaCommandResult> ExecuteAsync(MediaCommand command, CancellationToken cancellationToken = default) => ValueTask.FromResult(MediaCommandResult.NoSession);
+    public ValueTask<bool> SetVolumeAsync(double level, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
+}
 
 /// <summary>Coordinates the visible surface projection and placement, not authoritative runtime state.</summary>
 public sealed class SurfaceManager : ISurfaceManager, INotificationProjectionSink, IDisposable
@@ -22,13 +33,15 @@ public sealed class SurfaceManager : ISurfaceManager, INotificationProjectionSin
     private readonly IStateMachine _stateMachine;
     private readonly IInteractionEngine _interaction;
     private readonly IClipboardArtifactManager _clipboardArtifacts;
+    private readonly IMediaControlService _media;
+
     private string? _clipboardFilter;
     private readonly object _gate = new();
     private nint _windowHandle;
     private SurfacePresentationState _current = new(SurfacePresentationMode.Hidden, false, "Aura", "Ready");
     private AuraNotification? _currentNotification;
 
-    public SurfaceManager(ISurfaceView view, IWin32Interop interop, ILogger<SurfaceManager> logger, IStateMachine stateMachine, IInteractionEngine interaction, IClipboardArtifactManager clipboardArtifacts)
+    public SurfaceManager(ISurfaceView view, IWin32Interop interop, ILogger<SurfaceManager> logger, IStateMachine stateMachine, IInteractionEngine interaction, IClipboardArtifactManager clipboardArtifacts, IMediaControlService? media = null)
     {
         _view = view;
         _interop = interop;
@@ -36,8 +49,11 @@ public sealed class SurfaceManager : ISurfaceManager, INotificationProjectionSin
         _stateMachine = stateMachine;
         _interaction = interaction;
         _clipboardArtifacts = clipboardArtifacts;
+        _media = media ?? new UnavailableMediaControlService();
+        _current = _current with { Media = _media.Current };
         _stateMachine.StateChanged += OnStateChanged;
         _clipboardArtifacts.Changed += OnClipboardArtifactsChanged;
+        _media.Changed += OnMediaChanged;
         _view.InteractionRequested += OnInteractionRequested;
     }
 
@@ -76,6 +92,55 @@ public sealed class SurfaceManager : ISurfaceManager, INotificationProjectionSin
             _view.RenderOnUiThread(Current);
             return;
         }
+        if (e.Intent == InteractionIntent.OpenMedia)
+        {
+            var accepted = await _interaction.RequestAsync(InteractionIntent.EnterInteractive).ConfigureAwait(false);
+            if (!accepted) return;
+            lock (_gate)
+            {
+                _current = _current with { Media = _media.Current, IsMediaSurfaceOpen = true, IsClipboardHistoryOpen = false, Mode = SurfacePresentationMode.Interactive, IsVisible = true, StatusText = "Media controls", ContextText = string.Empty };
+            }
+            ApplyPresentation(Current, _windowHandle);
+            return;
+        }
+        if (e.Intent is InteractionIntent.MediaPlayPause or InteractionIntent.MediaPrevious or InteractionIntent.MediaNext or InteractionIntent.MediaVolumeChanged)
+        {
+            _ = await _interaction.RequestAsync(e.Intent, e.Value).ConfigureAwait(false);
+            return;
+        }
+        if (e.Intent == InteractionIntent.Collapse)
+        {
+            var accepted = await _interaction.RequestAsync(e.Intent).ConfigureAwait(false);
+            if (!accepted) return;
+            SurfacePresentationState state;
+            nint handle;
+            lock (_gate)
+            {
+                var isMediaOpen = _current.IsMediaSurfaceOpen;
+                _current = _current with
+                {
+                    IsMediaSurfaceOpen = false,
+                    IsClipboardHistoryOpen = false,
+                    Media = isMediaOpen ? null : _current.Media,
+                    Mode = isMediaOpen ? SurfacePresentationMode.Compact : _current.Mode,
+                    IsVisible = true,
+                    StatusText = "Ready",
+                    ContextText = string.Empty
+                };
+                state = _current;
+                handle = _windowHandle;
+            }
+            ApplyPresentation(state, handle);
+            return;
+        }
+        if (e.Intent == InteractionIntent.Dismiss)
+        {
+            var accepted = await _interaction.RequestAsync(e.Intent).ConfigureAwait(false);
+            if (!accepted) return;
+            lock (_gate) _current = _current with { IsMediaSurfaceOpen = false, IsClipboardHistoryOpen = false };
+            ApplyPresentation(Current, _windowHandle);
+            return;
+        }
         if (e.Intent is InteractionIntent.RestoreClipboard or InteractionIntent.PinClipboard
             or InteractionIntent.UnpinClipboard or InteractionIntent.DeleteClipboard)
         {
@@ -87,6 +152,17 @@ public sealed class SurfaceManager : ISurfaceManager, INotificationProjectionSin
             return;
         }
         _ = _interaction.RequestAsync(e.Intent);
+    }
+
+    private void OnMediaChanged(object? sender, MediaProjection projection)
+    {
+        SurfacePresentationState state;
+        lock (_gate)
+        {
+            _current = _current with { Media = projection };
+            state = _current;
+        }
+        _view.RenderOnUiThread(state);
     }
 
     private void OnClipboardArtifactsChanged(object? sender, ClipboardHistorySnapshot snapshot)
@@ -110,6 +186,7 @@ public sealed class SurfaceManager : ISurfaceManager, INotificationProjectionSin
         _stateMachine.StateChanged -= OnStateChanged;
         _view.InteractionRequested -= OnInteractionRequested;
         _clipboardArtifacts.Changed -= OnClipboardArtifactsChanged;
+        _media.Changed -= OnMediaChanged;
     }
 
     public void Project(AuraNotification notification, RuntimeDecision decision)
@@ -158,11 +235,16 @@ public sealed class SurfaceManager : ISurfaceManager, INotificationProjectionSin
         var monitor = _interop.GetMonitorSnapshot(handle);
         var expanded = mode is SurfacePresentationMode.Expanded or SurfacePresentationMode.Interactive;
         bool historyOpen;
-        lock (_gate) historyOpen = _current.IsClipboardHistoryOpen;
-        var width = historyOpen ? ClipboardHistoryWidth : expanded ? ExpandedWidth : CompactWidth;
+        bool mediaOpen;
+        lock (_gate)
+        {
+            historyOpen = _current.IsClipboardHistoryOpen;
+            mediaOpen = _current.IsMediaSurfaceOpen;
+        }
+        var width = historyOpen ? ClipboardHistoryWidth : mediaOpen ? ExpandedWidth : expanded ? ExpandedWidth : CompactWidth;
         var height = historyOpen
             ? Math.Min(520, Math.Max(ExpandedHeight, monitor.WorkBottom - monitor.WorkTop - 80))
-            : expanded ? ExpandedHeight : CompactHeight;
+            : mediaOpen ? ExpandedHeight : expanded ? ExpandedHeight : CompactHeight;
         var left = monitor.WorkLeft + (monitor.WorkRight - monitor.WorkLeft - width) / 2;
         _interop.SetWindowBounds(handle, left, monitor.WorkTop, width, height);
     }
@@ -190,7 +272,9 @@ public sealed class SurfaceManager : ISurfaceManager, INotificationProjectionSin
             }
             var keepClipboardHistory = _current.IsClipboardHistoryOpen
                 && next is not (SurfacePresentationMode.Dismissed or SurfacePresentationMode.Hidden or SurfacePresentationMode.Recovered);
-            var statusText = keepClipboardHistory
+            var keepMedia = _current.IsMediaSurfaceOpen
+                && next is not (SurfacePresentationMode.Dismissed or SurfacePresentationMode.Hidden or SurfacePresentationMode.Recovered);
+            var statusText = keepClipboardHistory || keepMedia
                 ? string.Empty
                 : next switch
                 {
@@ -201,13 +285,14 @@ public sealed class SurfaceManager : ISurfaceManager, INotificationProjectionSin
                 };
             _current = _current with
             {
-                Mode = keepClipboardHistory ? SurfacePresentationMode.Interactive : next,
-                IsVisible = keepClipboardHistory || visible,
-                StatusText = keepClipboardHistory || next == SurfacePresentationMode.Dismissed ? string.Empty : statusText,
-                ContextText = keepClipboardHistory ? string.Empty : next == SurfacePresentationMode.Dismissed ? string.Empty : _current.ContextText,
+                Mode = keepClipboardHistory || keepMedia ? SurfacePresentationMode.Interactive : next,
+                IsVisible = keepClipboardHistory || keepMedia || visible,
+                StatusText = keepClipboardHistory || keepMedia || next == SurfacePresentationMode.Dismissed ? string.Empty : statusText,
+                ContextText = keepClipboardHistory || keepMedia ? string.Empty : next == SurfacePresentationMode.Dismissed ? string.Empty : _current.ContextText,
                 Notification = _currentNotification,
                 ClipboardItems = keepClipboardHistory ? _clipboardArtifacts.Query(_clipboardFilter) : _current.ClipboardItems,
-                IsClipboardHistoryOpen = keepClipboardHistory
+                IsClipboardHistoryOpen = keepClipboardHistory,
+                IsMediaSurfaceOpen = keepMedia
             };
             state = _current;
             handle = _windowHandle;

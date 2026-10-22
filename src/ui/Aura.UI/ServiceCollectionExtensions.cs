@@ -6,6 +6,7 @@ using Aura.UI.Surface;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Aura.Runtime;
+using Aura.Platform.Windows;
 
 namespace Aura.UI;
 
@@ -13,6 +14,7 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddAuraUiShell(this IServiceCollection services)
     {
+        services.AddAuraWindowsMedia();
         services.AddSingleton<IWin32Interop, Win32Interop>();
         services.AddSingleton<Win32ClipboardNativeApi>();
         services.AddSingleton<IClipboardNativeApi>(sp => sp.GetRequiredService<Win32ClipboardNativeApi>());
@@ -32,7 +34,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SurfaceManager>();
         services.AddSingleton<ISurfaceManager>(sp => sp.GetRequiredService<SurfaceManager>());
         services.Replace(ServiceDescriptor.Singleton<Aura.Runtime.Notifications.INotificationProjectionSink>(sp => sp.GetRequiredService<SurfaceManager>()));
-        services.AddSingleton<Interaction.IInteractionEngine, Interaction.InteractionEngine>();
+        services.AddSingleton<Interaction.IInteractionEngine>(sp => new Interaction.InteractionEngine(
+            sp.GetRequiredService<IStateMachine>(),
+            sp.GetRequiredService<Aura.Runtime.Artifacts.IClipboardArtifactManager>(),
+            sp.GetRequiredService<Aura.Runtime.Media.IMediaControlService>()));
         return services;
     }
 }
