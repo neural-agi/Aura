@@ -29,6 +29,8 @@ public sealed class AuraSurfaceView : ISurfaceView
     private readonly Grid _clipboardPanel;
     private readonly Button _mediaOpen;
     private readonly MediaSurfacePanel _mediaPanel;
+    private readonly LatestValueRenderQueue<SurfacePresentationState> _mediaRenderQueue;
+    private Microsoft.UI.Dispatching.DispatcherQueue? _dispatcherQueue;
 
     public AuraSurfaceView()
     {
@@ -42,6 +44,15 @@ public sealed class AuraSurfaceView : ISurfaceView
         _clipboardBrowse = CreateButton("Clipboard history", "Browse clipboard history", InteractionIntent.BrowseClipboard);
         _mediaOpen = CreateButton("Media", "Open media controls", InteractionIntent.OpenMedia);
         _mediaPanel = new MediaSurfacePanel((intent, value) => InteractionRequested?.Invoke(this, new(intent, value)));
+        _mediaRenderQueue = new LatestValueRenderQueue<SurfacePresentationState>(
+            Render,
+            action =>
+            {
+                var dispatcher = _dispatcherQueue ?? throw new InvalidOperationException("The UI dispatcher is unavailable.");
+                if (!dispatcher.TryEnqueue(() => action()))
+                    throw new InvalidOperationException("The UI dispatcher rejected the media render.");
+            },
+            () => System.Diagnostics.Debug.WriteLine("Media surface render was not queued because the UI dispatcher is unavailable."));
         _clipboardFilter = new TextBox { PlaceholderText = "Filter clipboard history" };
         AutomationProperties.SetName(_clipboardFilter, "Filter clipboard history");
         _clipboardFilter.TextChanged += (_, _) => InteractionRequested?.Invoke(this, new(InteractionIntent.FilterClipboard, _clipboardFilter.Text));
@@ -167,6 +178,7 @@ public sealed class AuraSurfaceView : ISurfaceView
             VerticalAlignment = VerticalAlignment.Stretch
         };
         Root = _surface;
+        _dispatcherQueue = Root.DispatcherQueue;
         Render(new SurfacePresentationState(SurfacePresentationMode.Hidden, false, string.Empty, string.Empty));
     }
 
@@ -245,15 +257,27 @@ public sealed class AuraSurfaceView : ISurfaceView
 
     public void RenderOnUiThread(SurfacePresentationState state, Action? afterRender = null)
     {
-        void Apply()
+        if (Root.DispatcherQueue.HasThreadAccess)
         {
             Render(state);
             afterRender?.Invoke();
+            return;
         }
 
-        if (Root.DispatcherQueue.HasThreadAccess) Apply();
-        else _ = Root.DispatcherQueue.TryEnqueue(Apply);
+        if (state.Media is not null && state.IsMediaSurfaceOpen)
+        {
+            _mediaRenderQueue.Submit(state);
+            return;
+        }
+
+        var accepted = Root.DispatcherQueue.TryEnqueue(() =>
+        {
+            Render(state);
+            afterRender?.Invoke();
+        });
+        if (!accepted) System.Diagnostics.Debug.WriteLine("Surface render was not queued because the UI dispatcher is unavailable.");
     }
+
 
     public void BeginStartupEntrance()
     {

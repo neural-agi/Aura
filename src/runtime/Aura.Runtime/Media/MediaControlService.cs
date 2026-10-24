@@ -10,6 +10,8 @@ public sealed class MediaControlService : IMediaControlService
     private readonly ILogger<MediaControlService> _logger;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private readonly object _lifecycleLock = new();
+    private readonly object _projectionLock = new();
+
     private MediaProjection _current = MediaProjection.Unavailable;
     private CancellationTokenSource? _lifetime;
     private Task? _refreshTask;
@@ -146,10 +148,38 @@ public sealed class MediaControlService : IMediaControlService
 
     private void OnVolumeChanged(object? sender, double level)
     {
-        var current = Current;
-        var bounded = double.IsFinite(level) ? Math.Clamp(level, 0d, 1d) : (double?)null;
-        Publish(current with { Volume = bounded is { } value ? new MediaVolumeSnapshot(true, value) : MediaVolumeSnapshot.Unavailable });
+        _ = RefreshVolumeFromEndpointAsync();
     }
+
+    private async Task RefreshVolumeFromEndpointAsync()
+    {
+        double? level;
+        try { level = await _volume.GetVolumeAsync().ConfigureAwait(false); }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "System volume refresh failed after an endpoint notification.");
+            level = null;
+        }
+
+        var bounded = level is { } value && double.IsFinite(value) ? Math.Clamp(value, 0d, 1d) : (double?)null;
+
+        MediaProjection? updated = null;
+        lock (_projectionLock)
+        {
+            var current = Current;
+            var projection = current with { Volume = bounded is { } currentLevel ? new MediaVolumeSnapshot(true, currentLevel) : MediaVolumeSnapshot.Unavailable };
+            if (!Equals(current, projection))
+            {
+                Volatile.Write(ref _current, projection);
+                updated = projection;
+            }
+        }
+        if (updated is not null)
+        {
+            Changed?.Invoke(this, updated);
+        }
+    }
+
 
     private void QueueRefresh()
     {
@@ -214,8 +244,11 @@ public sealed class MediaControlService : IMediaControlService
 
     private void Publish(MediaProjection projection)
     {
-        if (Equals(Current, projection)) return;
-        Volatile.Write(ref _current, projection);
+        lock (_projectionLock)
+        {
+            if (Equals(Current, projection)) return;
+            Volatile.Write(ref _current, projection);
+        }
         Changed?.Invoke(this, projection);
     }
 }

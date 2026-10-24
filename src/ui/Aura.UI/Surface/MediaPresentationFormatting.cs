@@ -4,12 +4,12 @@ namespace Aura.UI.Surface;
 
 public static class MediaPresentationFormatting
 {
-    public static string FormatVolumePercent(double? normalizedLevel)
+    public static string FormatVolumeValue(double? normalizedLevel)
     {
         if (normalizedLevel is not { } level || !double.IsFinite(level)) return "Unavailable";
 
         var percentage = Math.Round(Math.Clamp(level, 0d, 1d) * 100d, MidpointRounding.AwayFromZero);
-        return percentage.ToString("0", CultureInfo.InvariantCulture) + "%";
+        return percentage.ToString("0", CultureInfo.InvariantCulture);
     }
 
     public static string FormatSourceName(string? sourceApplication)

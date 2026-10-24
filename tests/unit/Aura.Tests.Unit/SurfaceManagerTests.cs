@@ -257,18 +257,18 @@ public sealed class SurfaceManagerTests
     }
 
     [Xunit.Fact]
-    public void VolumePresentationUsesInvariantPercentAndClampsKnownValues()
+    public void VolumePresentationUsesInvariantNumericValueAndClampsKnownValues()
     {
-        MediaPresentationFormatting.FormatVolumePercent(0d).Should().Be("0%");
-        MediaPresentationFormatting.FormatVolumePercent(0.37d).Should().Be("37%");
-        MediaPresentationFormatting.FormatVolumePercent(0.50d).Should().Be("50%");
-        MediaPresentationFormatting.FormatVolumePercent(1d).Should().Be("100%");
-        MediaPresentationFormatting.FormatVolumePercent(0.375d).Should().Be("38%");
-        MediaPresentationFormatting.FormatVolumePercent(0.995d).Should().Be("100%");
-        MediaPresentationFormatting.FormatVolumePercent(-1d).Should().Be("0%");
-        MediaPresentationFormatting.FormatVolumePercent(2d).Should().Be("100%");
-        MediaPresentationFormatting.FormatVolumePercent(double.NaN).Should().Be("Unavailable");
-        MediaPresentationFormatting.FormatVolumePercent(null).Should().Be("Unavailable");
+        MediaPresentationFormatting.FormatVolumeValue(0d).Should().Be("0");
+        MediaPresentationFormatting.FormatVolumeValue(0.37d).Should().Be("37");
+        MediaPresentationFormatting.FormatVolumeValue(0.50d).Should().Be("50");
+        MediaPresentationFormatting.FormatVolumeValue(1d).Should().Be("100");
+        MediaPresentationFormatting.FormatVolumeValue(0.375d).Should().Be("38");
+        MediaPresentationFormatting.FormatVolumeValue(0.995d).Should().Be("100");
+        MediaPresentationFormatting.FormatVolumeValue(-1d).Should().Be("0");
+        MediaPresentationFormatting.FormatVolumeValue(2d).Should().Be("100");
+        MediaPresentationFormatting.FormatVolumeValue(double.NaN).Should().Be("Unavailable");
+        MediaPresentationFormatting.FormatVolumeValue(null).Should().Be("Unavailable");
         MediaPresentationFormatting.FormatSourceName("Spotify.exe").Should().Be("Spotify");
         MediaPresentationFormatting.FormatSourceName("Package.Family!Player").Should().Be("Player");
         MediaPresentationFormatting.FormatSourceName("unfamiliar-id").Should().Be("unfamiliar-id");

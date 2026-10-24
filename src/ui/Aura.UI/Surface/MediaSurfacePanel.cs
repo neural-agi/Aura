@@ -29,7 +29,7 @@ internal sealed class MediaSurfacePanel
 
     public MediaSurfacePanel(Action<InteractionIntent, string?> raiseIntent)
     {
-        _root = new Grid { ColumnSpacing = 14, Padding = new Thickness(18, 10, 18, 10), Visibility = Visibility.Collapsed };
+        _root = new Grid { ColumnSpacing = 14, Padding = new Thickness(18, 2, 18, 2), Visibility = Visibility.Collapsed };
         _root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(88) });
         _root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
@@ -41,8 +41,8 @@ internal sealed class MediaSurfacePanel
         artHost.Children.Add(_fallback);
         _root.Children.Add(artHost);
 
-        var details = new Grid { RowSpacing = 5, VerticalAlignment = VerticalAlignment.Center };
-        for (var row = 0; row < 6; row++) details.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var details = new Grid { RowSpacing = 3, VerticalAlignment = VerticalAlignment.Center };
+        for (var row = 0; row < 5; row++) details.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _source = NewText(11, Microsoft.UI.Colors.LightGray);
         _title = NewText(17, Microsoft.UI.Colors.White);
         _title.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
@@ -68,24 +68,40 @@ internal sealed class MediaSurfacePanel
         volumeLabel.Text = "System volume";
         AutomationProperties.SetName(volumeLabel, "System volume");
         _volume = new Slider { Minimum = 0, Maximum = 1, StepFrequency = 0.01, MinWidth = 96, MaxWidth = 180, VerticalAlignment = VerticalAlignment.Center };
+        _volume.IsThumbToolTipEnabled = false;
         AutomationProperties.SetName(_volume, "System volume");
         AutomationProperties.SetHelpText(_volume, "Adjust system output volume from 0 to 100 percent.");
         _volumeValue = NewText(11, Microsoft.UI.Colors.LightGray);
-        _volumeValue.MinWidth = 36;
+        _volumeValue.MinWidth = 30;
         _volume.ValueChanged += (_, args) =>
         {
-            _volumeValue.Text = MediaPresentationFormatting.FormatVolumePercent(args.NewValue);
+            _volumeValue.Text = MediaPresentationFormatting.FormatVolumeValue(args.NewValue);
             if (!_rendering) raiseIntent(InteractionIntent.MediaVolumeChanged, args.NewValue.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        };
+        _volume.PointerWheelChanged += (_, args) =>
+        {
+            var delta = args.GetCurrentPoint(_volume).Properties.MouseWheelDelta;
+            if (delta == 0) return;
+
+            var nextValue = Math.Clamp(_volume.Value + Math.Sign(delta) * 0.05, 0d, 1d);
+            if (nextValue == _volume.Value) return;
+
+            _volume.Value = nextValue;
+            args.Handled = true;
         };
         volumeRow.Children.Add(volumeLabel);
         Grid.SetColumn(_volume, 1); volumeRow.Children.Add(_volume);
         Grid.SetColumn(_volumeValue, 2); volumeRow.Children.Add(_volumeValue);
         Grid.SetRow(volumeRow, 4); details.Children.Add(volumeRow);
 
-        _home = CreateButton("Home", "Return to Aura Home", InteractionIntent.Collapse, raiseIntent, 56, 30);
-        Grid.SetRow(_home, 5); details.Children.Add(_home);
-        Grid.SetColumn(details, 1);
         _root.Children.Add(details);
+        Grid.SetColumn(details, 1);
+
+        _home = CreateButton("‹ Home", "Return to Aura Home", InteractionIntent.Collapse, raiseIntent, 72, 30);
+        _home.HorizontalAlignment = HorizontalAlignment.Right;
+        _home.VerticalAlignment = VerticalAlignment.Top;
+        _home.Margin = new Thickness(0, -2, 0, 0);
+        _root.Children.Add(_home);
     }
 
     public FrameworkElement Root => _root;
@@ -110,12 +126,17 @@ internal sealed class MediaSurfacePanel
         {
             var normalized = Math.Clamp(level, 0, 1);
             _volume.Value = normalized;
-            _volumeValue.Text = MediaPresentationFormatting.FormatVolumePercent(normalized);
+            _volumeValue.Text = MediaPresentationFormatting.FormatVolumeValue(normalized);
+
         }
-        else _volumeValue.Text = "Unavailable";
+        else
+        {
+            _volumeValue.Text = "Unavailable";
+        }
         _rendering = false;
         SetArtwork(session);
     }
+
 
     private void SetArtwork(MediaSessionSnapshot session)
     {

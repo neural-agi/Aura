@@ -8,6 +8,7 @@ public sealed class WindowsSystemVolumeAdapter : ISystemVolumeAdapter
     private readonly object _gate = new();
     private readonly SemaphoreSlim _ioGate = new(1, 1);
     private int _disposeStarted;
+    private readonly Guid _eventContext = Guid.NewGuid();
     private MMDeviceEnumerator? _enumerator;
     private MMDevice? _device;
     private AudioEndpointVolume? _endpoint;
@@ -69,7 +70,7 @@ public sealed class WindowsSystemVolumeAdapter : ISystemVolumeAdapter
                 _device ??= _enumerator.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Multimedia);
                 try
                 {
-                    _endpoint = _device.AudioEndpointVolume;
+                    _endpoint = _device.AudioEndpointVolume(_eventContext);
                     _endpoint.OnVolumeNotification += OnVolumeNotification;
                     return _endpoint;
                 }
@@ -86,7 +87,7 @@ public sealed class WindowsSystemVolumeAdapter : ISystemVolumeAdapter
     private void OnVolumeNotification(object? sender, AudioVolumeNotificationData notification)
     {
         var bounded = Math.Clamp((double)notification.MasterVolume, 0d, 1d);
-        ThreadPool.QueueUserWorkItem(_ => VolumeChanged?.Invoke(this, bounded));
+        VolumeChanged?.Invoke(this, bounded);
     }
 
     public async ValueTask DisposeAsync()
@@ -151,14 +152,11 @@ public sealed class WindowsSystemVolumeAdapter : ISystemVolumeAdapter
     private sealed class MMDevice(IMMDevice native) : IDisposable
     {
         private static readonly Guid AudioEndpointVolumeId = new("5CDF2C82-841E-4546-9722-0CF74078229A");
-        public AudioEndpointVolume AudioEndpointVolume
+        public AudioEndpointVolume AudioEndpointVolume(Guid eventContext)
         {
-            get
-            {
-                var iid = AudioEndpointVolumeId;
-                Marshal.ThrowExceptionForHR(native.Activate(ref iid, 23, 0, out var result));
-                return new AudioEndpointVolume((IAudioEndpointVolume)result);
-            }
+            var iid = AudioEndpointVolumeId;
+            Marshal.ThrowExceptionForHR(native.Activate(ref iid, 23, 0, out var result));
+            return new AudioEndpointVolume((IAudioEndpointVolume)result, eventContext);
         }
         public void Dispose() => Marshal.ReleaseComObject(native);
     }
@@ -202,11 +200,12 @@ public sealed class WindowsSystemVolumeAdapter : ISystemVolumeAdapter
         private readonly IAudioEndpointVolume _native;
         private readonly VolumeCallback _callback;
         private EventHandler<AudioVolumeNotificationData>? _changed;
-        private static readonly Guid EventContext = Guid.Empty;
+        private readonly Guid _eventContext;
 
-        public AudioEndpointVolume(IAudioEndpointVolume native)
+        public AudioEndpointVolume(IAudioEndpointVolume native, Guid eventContext)
         {
             _native = native;
+            _eventContext = eventContext;
             _callback = new VolumeCallback(data => _changed?.Invoke(this, data));
             Marshal.ThrowExceptionForHR(_native.RegisterControlChangeNotify(_callback));
         }
@@ -214,7 +213,7 @@ public sealed class WindowsSystemVolumeAdapter : ISystemVolumeAdapter
         public float MasterVolumeLevelScalar
         {
             get { Marshal.ThrowExceptionForHR(_native.GetMasterVolumeLevelScalar(out var value)); return value; }
-            set { var context = EventContext; Marshal.ThrowExceptionForHR(_native.SetMasterVolumeLevelScalar(value, ref context)); }
+            set { var context = _eventContext; Marshal.ThrowExceptionForHR(_native.SetMasterVolumeLevelScalar(value, ref context)); }
         }
 
         public event EventHandler<AudioVolumeNotificationData> OnVolumeNotification

@@ -165,6 +165,7 @@ public sealed class SurfaceManager : ISurfaceManager, INotificationProjectionSin
         _view.RenderOnUiThread(state);
     }
 
+
     private void OnClipboardArtifactsChanged(object? sender, ClipboardHistorySnapshot snapshot)
     {
         SurfacePresentationState state;

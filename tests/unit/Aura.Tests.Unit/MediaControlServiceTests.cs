@@ -82,6 +82,47 @@ public sealed class MediaControlServiceTests
     }
 
     [Xunit.Fact]
+    public async Task ExternalVolumeChangesUpdateProjectionAndAuraVolumeWritesSettleWithoutDuplicateNotifications()
+    {
+        var adapter = new FakeMediaAdapter();
+        await using var volume = new FakeVolumeAdapter { Level = 0.53 };
+        var service = new MediaControlService(adapter, volume, NullLogger<MediaControlService>.Instance);
+        var observed = new List<MediaProjection>();
+        service.Changed += (_, projection) => observed.Add(projection);
+        await service.StartAsync();
+        observed.Clear();
+
+        var notificationTime = DateTime.UtcNow;
+        volume.SetExternalLevel(0.54);
+        await service.WaitForProjectionAsync(projection => projection.Volume.Level == 0.54);
+        service.Current.Volume.Level.Should().BeApproximately(0.54, 0.001);
+        observed.Should().ContainSingle().Which.Volume.Level.Should().BeApproximately(0.54, 0.001);
+        (DateTime.UtcNow - notificationTime).Should().BeLessThan(TimeSpan.FromMilliseconds(100));
+
+        observed.Clear();
+        volume.Level = 0.55;
+        volume.RaiseVolumeChanged(0.01);
+        await service.WaitForProjectionAsync(projection => projection.Volume.Level == 0.55);
+        service.Current.Volume.Level.Should().BeApproximately(0.55, 0.001);
+        observed.Should().ContainSingle().Which.Volume.Level.Should().BeApproximately(0.55, 0.001);
+
+        observed.Clear();
+        (await service.SetVolumeAsync(0.58)).Should().BeTrue();
+        volume.LastSet.Should().BeApproximately(0.58, 0.001);
+        volume.RaiseVolumeChanged();
+        observed.Should().ContainSingle().Which.Volume.Level.Should().BeApproximately(0.58, 0.001);
+
+        observed.Clear();
+        volume.SetExternalLevel(0.56);
+        volume.SetExternalLevel(0.57);
+        service.Current.Volume.Level.Should().BeApproximately(0.57, 0.001);
+        observed.Select(projection => projection.Volume.Level).Should().ContainInOrder(0.56, 0.57);
+
+        await service.StopAsync();
+        volume.EventSubscribers.Should().Be(0);
+    }
+
+    [Xunit.Fact]
     public async Task EventDuringRefreshCausesLatestSnapshotToBeProjected()
     {
         var adapter = new FakeMediaAdapter();
@@ -201,8 +242,10 @@ public sealed class MediaControlServiceTests
         public int EventSubscribers => _changed?.GetInvocationList().Length ?? 0;
         public event EventHandler<double>? VolumeChanged { add => _changed += value; remove => _changed -= value; }
         public ValueTask<double?> GetVolumeAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(Level);
-        public ValueTask<bool> SetVolumeAsync(double level, CancellationToken cancellationToken = default) { LastSet = level; return ValueTask.FromResult(true); }
+        public ValueTask<bool> SetVolumeAsync(double level, CancellationToken cancellationToken = default) { LastSet = level; Level = level; return ValueTask.FromResult(true); }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public void SetExternalLevel(double level) { Level = level; RaiseVolumeChanged(); }
         public void RaiseVolumeChanged() => _changed?.Invoke(this, Level!.Value);
+        public void RaiseVolumeChanged(double eventValue) => _changed?.Invoke(this, eventValue);
     }
 }
